@@ -4,6 +4,9 @@ import net from 'node:net';
 // Max value of an incoming WebSocket message in KiB.
 const DEFAULT_PAYLOAD_LENGTH_KIB = 64 * 1024;
 
+// Close reason uWS reports when a message exceeds maxPayloadLength.
+const UWS_TOO_BIG_MESSAGE_REASON = 'Received too big message';
+
 export function decodeUwsAddress(address) {
   return Buffer.from(address).toString();
 }
@@ -153,7 +156,18 @@ export function createUwsTransport() {
           );
         },
 
-        close(socket) {
+        close(socket, code, message) {
+          // uWS closes a connection whose message exceeds maxPayloadLength
+          // without telling the client why (it sees code 1006), so log it.
+          if (Buffer.from(message).toString() === UWS_TOO_BIG_MESSAGE_REASON) {
+            Meteor._debug(
+              'uws: closed a DDP connection because the client sent a ' +
+              'message larger than ' + uwsPayloadLength + ' KiB. To allow ' +
+              'larger messages, raise Meteor.settings.packages["ddp-server"]' +
+              '.uws.payloadLength (in KiB).'
+            );
+          }
+
           socket.isClosed = true;
           const listeners = closeListeners.get(socket);
           closeListeners.delete(socket);
