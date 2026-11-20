@@ -90,6 +90,61 @@ if (process.env.DDP_TRANSPORT === 'uws') {
       if (relay.listening) await new Promise(resolve => relay.close(resolve));
     }
   });
+
+  // Returns how much of the argument reached the server.
+  Meteor.methods({
+    raw_websocket_test_message_length(payload) {
+      return payload.length;
+    },
+  });
+
+  // Regression test for #14997: uws closed the connection (code 1006) for
+  // any client message over 48 KiB, while SockJS accepted up to 64 MiB.
+  Tinytest.addAsync('stream server - uws accepts a client message larger than 48 KiB', async test => {
+    // Bypass the development tool's extra proxy hop and connect to the
+    // application's HTTP listener, which forwards /websocket to uWS.
+    const url = new URL(Meteor.absoluteUrl('websocket'));
+    url.protocol = 'ws:';
+    url.hostname = '127.0.0.1';
+    url.port = WebApp.httpServer.address().port;
+
+    const payload = 'a'.repeat(49 * 1024);
+    const ws = new WebSocket(url.toString());
+    let timer;
+    try {
+      const outcome = await new Promise((resolve, reject) => {
+        timer = Meteor.setTimeout(
+          () => reject(new Error('no method result within 10 seconds')), 10000);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ msg: 'connect', version: '1', support: ['1'] }));
+        };
+        ws.onmessage = event => {
+          const message = JSON.parse(event.data);
+          if (message.msg === 'connected') {
+            ws.send(JSON.stringify({
+              msg: 'method',
+              id: '1',
+              method: 'raw_websocket_test_message_length',
+              params: [payload],
+            }));
+          } else if (message.msg === 'result' && message.id === '1') {
+            resolve(message);
+          }
+        };
+        ws.onclose = event => resolve({ closedWithCode: event.code });
+      });
+
+      test.isUndefined(outcome.closedWithCode,
+        'the socket closed with code ' + outcome.closedWithCode +
+        ' instead of answering the method call');
+      test.isUndefined(outcome.error, 'the method call should not fail');
+      test.equal(outcome.result, payload.length,
+        'the server should receive the whole message');
+    } finally {
+      Meteor.clearTimeout(timer);
+      ws.close();
+    }
+  });
 }
 
 // Helper: make an HTTP GET request to the given URL, return { statusCode, headers, body }
