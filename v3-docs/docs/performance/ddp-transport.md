@@ -57,6 +57,8 @@ This populates `Meteor.settings.packages["ddp-server"].transport` on the server,
 
 `DISABLE_SOCKJS=1` is honored as an alias for `DDP_TRANSPORT=uws` for backward compatibility, but it is deprecated. Prefer `DDP_TRANSPORT` for new deployments because it leaves room for additional transport backends and is easier to read in deployment configs.
 
+Before Meteor 3.5, `DISABLE_SOCKJS=1` only made the browser use a raw WebSocket. Since 3.5 it also switches the server to uws, which has its own limits. See [the uws settings](#configure-a-distinct-uws-port-per-process).
+
 See the full [`DDP_TRANSPORT`](/cli/environment-variables#ddp-transport) and [`DISABLE_SOCKJS`](/cli/environment-variables#disable-sockjs) reference for details.
 
 ## Operational considerations
@@ -161,7 +163,7 @@ The full set of settings:
 |-------|---------|---------|
 | `port` | `5001` | TCP port of the internal uws listen socket |
 | `host` | `"127.0.0.1"` | Address the internal uws server binds to |
-| `payloadLength` | `48` | Max WebSocket payload, in KiB |
+| `payloadLength` | `65536` (64 MiB) | Max size of one client message, in KiB |
 | `timeout` | `45` | Idle timeout, in seconds |
 
 If you cannot avoid running on the same port, use distinct loopback hosts (`127.0.0.2`, `127.0.0.3`, …) — Linux routes all of `127.0.0.0/8` to `lo` by default, so each process binds a distinct `(host, port)` tuple and the kernel demuxes correctly.
@@ -266,6 +268,7 @@ If you are switching an existing app from `sockjs` to `uws`:
 - [ ] Roll out to a subset of traffic first if your load balancer supports it.
 - [ ] Keep `sockjs` available as a rollback (toggle the env var, redeploy).
 - [ ] If multiple Meteor processes will share a host (multi-tenant, multi-process scaling, Galaxy co-scheduling, etc.), set a distinct `Meteor.settings.packages["ddp-server"].uws.port` for each. See [Multi-process and multi-tenant deployments](#multitenancy).
+- [ ] Confirm your largest client messages (method arguments, subscription parameters) fit under `uws.payloadLength`.
 
 
 ## Reverting to `sockjs`
