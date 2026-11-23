@@ -90,6 +90,8 @@ In the event that your own deployment platform does not support WebSockets, or y
 
 Set `DISABLE_SOCKJS=1` to use raw WebSocket instead of SockJS. This is equivalent to `DDP_TRANSPORT=uws` and is kept for backward compatibility. 
 
+Before Meteor 3.5, `DISABLE_SOCKJS=1` only made the browser use a raw WebSocket. Since 3.5 it also switches the server to uws, which has its own limits. See [the uws settings](/performance/ddp-transport#configure-a-distinct-uws-port-per-process).
+
 ::: tip
 *Migration Note:* `DISABLE_SOCKJS=1` is deprecated. Prefer using [`DDP_TRANSPORT=uws`](#ddp-transport) or configuring `"transport": "uws"` in your `settings.json` file. `DDP_TRANSPORT` is more explicit and establishes a foundation for future transport backend additions.
 :::
